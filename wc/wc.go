@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"unicode"
+	"unicode/utf8"
 )
 
 func main() {
@@ -37,6 +38,13 @@ func main() {
 	case "-l":
 		count := countLines(filename)
 		fmt.Printf("Number of lines: %d\n", count)
+	case "-m":
+		count, err := countRunes(filename)
+		if err != nil {
+			fmt.Println("Error counting runes:", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Number of runes: %d\n", count)
 	default:
 	}
 }
@@ -140,6 +148,65 @@ func countWords(filename string) (int, error) {
 				break
 			}
 			return count, fmt.Errorf("error reading file: %w", err)
+		}
+	}
+
+	return count, nil
+}
+
+func countRunes(filename string) (int, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return 0, fmt.Errorf("error opening file: %w", err)
+	}
+	defer file.Close()
+
+	const bufferSize = 1 << 16 // 64 KB buffer
+	buf := make([]byte, bufferSize)
+	reader := bufio.NewReader(file)
+	count := 0
+
+	// To handle runes that span across buffer boundaries.
+	var leftover []byte
+	for {
+		n, err := reader.Read(buf)
+		if n > 0 {
+			data := buf[:n]
+			if len(leftover) > 0 {
+				// Prepend leftover bytes to the current buffer.
+				data = append(leftover, data...)
+				leftover = nil
+			}
+
+			i := 0
+			for i < len(data) {
+				r, size := utf8.DecodeRune(data[i:])
+				if r == utf8.RuneError && size == 1 {
+					// Incomplete rune at the end of the buffer.
+					break
+				}
+				count++
+				i += size
+			}
+
+			if i < len(data) {
+				// Store leftover bytes for the next read.
+				leftover = append(leftover, data[i:]...)
+			}
+		}
+
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				return count, fmt.Errorf("error reading file: %w", err)
+			}
+
+			// If there are leftover bytes, check if they form a valid rune.
+			if len(leftover) > 0 {
+				if _, size := utf8.DecodeRune(leftover); size > 0 {
+					count++
+				}
+			}
+			break
 		}
 	}
 

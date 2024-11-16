@@ -45,3 +45,17 @@ func BenchmarkCountLines(b *testing.B) {
 		countLines("test.txt")
 	}
 }
+
+func TestCountRunes(t *testing.T) {
+	want := 339292
+	got, err := countRunes("test.txt")
+	assert.NoError(t, err)
+	assert.Equal(t, want, got)
+}
+
+func BenchmarkCountRunes(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_, _ = countRunes("test.txt")
+	}
+}
